@@ -433,6 +433,9 @@ async def get_rag_config(request: Request, user=Depends(get_admin_user)):
         "TOP_K_RERANKER": request.app.state.config.TOP_K_RERANKER,
         "RELEVANCE_THRESHOLD": request.app.state.config.RELEVANCE_THRESHOLD,
         "HYBRID_BM25_WEIGHT": request.app.state.config.HYBRID_BM25_WEIGHT,
+        # Agentic RAG settings
+        "ENABLE_AGENTIC_RAG": getattr(request.app.state.config, "ENABLE_AGENTIC_RAG", False),
+        "AGENTIC_RAG_MAX_ITERATIONS": getattr(request.app.state.config, "AGENTIC_RAG_MAX_ITERATIONS", 3),
         # Content extraction settings
         "CONTENT_EXTRACTION_ENGINE": request.app.state.config.CONTENT_EXTRACTION_ENGINE,
         "PDF_EXTRACT_IMAGES": request.app.state.config.PDF_EXTRACT_IMAGES,
@@ -616,6 +619,10 @@ class ConfigForm(BaseModel):
     RELEVANCE_THRESHOLD: Optional[float] = None
     HYBRID_BM25_WEIGHT: Optional[float] = None
 
+    # Agentic RAG settings
+    ENABLE_AGENTIC_RAG: Optional[bool] = None
+    AGENTIC_RAG_MAX_ITERATIONS: Optional[int] = None
+
     # Content extraction settings
     CONTENT_EXTRACTION_ENGINE: Optional[str] = None
     PDF_EXTRACT_IMAGES: Optional[bool] = None
@@ -734,6 +741,20 @@ async def update_rag_config(
         if form_data.HYBRID_BM25_WEIGHT is not None
         else request.app.state.config.HYBRID_BM25_WEIGHT
     )
+
+    # Agentic RAG settings
+    if hasattr(request.app.state.config, "ENABLE_AGENTIC_RAG"):
+        request.app.state.config.ENABLE_AGENTIC_RAG = (
+            form_data.ENABLE_AGENTIC_RAG
+            if form_data.ENABLE_AGENTIC_RAG is not None
+            else request.app.state.config.ENABLE_AGENTIC_RAG
+        )
+    if hasattr(request.app.state.config, "AGENTIC_RAG_MAX_ITERATIONS"):
+        request.app.state.config.AGENTIC_RAG_MAX_ITERATIONS = (
+            form_data.AGENTIC_RAG_MAX_ITERATIONS
+            if form_data.AGENTIC_RAG_MAX_ITERATIONS is not None
+            else request.app.state.config.AGENTIC_RAG_MAX_ITERATIONS
+        )
 
     # Content extraction settings
     request.app.state.config.CONTENT_EXTRACTION_ENGINE = (

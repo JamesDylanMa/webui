@@ -69,6 +69,7 @@ from open_webui.models.functions import Functions
 from open_webui.models.models import Models
 
 from open_webui.retrieval.utils import get_sources_from_items
+from open_webui.retrieval.agentic_rag import AgenticRAGEngine
 
 
 from open_webui.utils.chat import generate_chat_completion
@@ -910,10 +911,100 @@ async def chat_completion_files_handler(
 ) -> tuple[dict, dict[str, list]]:
     __event_emitter__ = extra_params["__event_emitter__"]
     sources = []
+    use_agentic_rag = False
 
     if files := body.get("metadata", {}).get("files", None):
+        # Check if Agentic RAG is enabled
+        try:
+            use_agentic_rag = request.app.state.config.ENABLE_AGENTIC_RAG
+        except AttributeError:
+            use_agentic_rag = False
+
         # Check if all files are in full context mode
         all_full_context = all(item.get("context") == "full" for item in files)
+
+        # Use Agentic RAG if enabled and not in full context mode
+        if use_agentic_rag and not all_full_context:
+            try:
+                # Get collection names from files
+                collection_names = []
+                for file_item in files:
+                    collection_name = file_item.get("collection_name") or file_item.get("id")
+                    if collection_name and collection_name not in collection_names:
+                        collection_names.append(collection_name)
+                
+                if collection_names:
+                    # Get MCP clients from metadata if available
+                    mcp_clients = extra_params.get("__metadata__", {}).get("mcp_clients", {})
+                    
+                    # Initialize Agentic RAG Engine
+                    agentic_engine = AgenticRAGEngine(
+                        request=request,
+                        user=user,
+                        embedding_function=lambda query, prefix: request.app.state.EMBEDDING_FUNCTION(
+                            query, prefix=prefix, user=user
+                        ),
+                        reranking_function=(
+                            (
+                                lambda sentences: request.app.state.RERANKING_FUNCTION(
+                                    sentences, user=user
+                                )
+                            )
+                            if request.app.state.RERANKING_FUNCTION
+                            else None
+                        ),
+                        mcp_clients=mcp_clients,
+                        max_iterations=getattr(request.app.state.config, "AGENTIC_RAG_MAX_ITERATIONS", 3)
+                    )
+                    
+                    # Get user query
+                    user_query = get_last_user_message(body["messages"])
+                    chat_history = body.get("messages", [])[:-1]  # Exclude last message (current query)
+                    
+                    # Process with Agentic RAG
+                    await __event_emitter__(
+                        {
+                            "type": "status",
+                            "data": {
+                                "action": "agentic_rag_started",
+                                "done": False,
+                            },
+                        }
+                    )
+                    
+                    result = await agentic_engine.process(
+                        query=user_query,
+                        collection_names=collection_names,
+                        chat_history=chat_history,
+                        k=request.app.state.config.TOP_K,
+                        k_reranker=request.app.state.config.TOP_K_RERANKER,
+                        r=request.app.state.config.RELEVANCE_THRESHOLD
+                    )
+                    
+                    sources = result.get("sources", [])
+                    
+                    # Update body with agentic answer if available
+                    if result.get("answer"):
+                        # The answer will be used in the context string below
+                        pass
+                    
+                    await __event_emitter__(
+                        {
+                            "type": "status",
+                            "data": {
+                                "action": "agentic_rag_completed",
+                                "iterations": result.get("iterations", 1),
+                                "done": True,
+                            },
+                        }
+                    )
+                    
+                    # Skip traditional RAG processing
+                    return body, {"sources": sources}
+                    
+            except Exception as e:
+                log.exception(f"Error in Agentic RAG, falling back to traditional RAG: {e}")
+                # Fall through to traditional RAG processing
 
         queries = []
         if not all_full_context:

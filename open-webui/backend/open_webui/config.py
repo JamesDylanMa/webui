@@ -2510,6 +2510,18 @@ ENABLE_RAG_HYBRID_SEARCH = PersistentConfig(
     os.environ.get("ENABLE_RAG_HYBRID_SEARCH", "").lower() == "true",
 )
 
+ENABLE_AGENTIC_RAG = PersistentConfig(
+    "ENABLE_AGENTIC_RAG",
+    "rag.enable_agentic",
+    os.environ.get("ENABLE_AGENTIC_RAG", "").lower() == "true",
+)
+
+AGENTIC_RAG_MAX_ITERATIONS = PersistentConfig(
+    "AGENTIC_RAG_MAX_ITERATIONS",
+    "rag.agentic_max_iterations",
+    int(os.environ.get("AGENTIC_RAG_MAX_ITERATIONS", "3")),
+)
+
 RAG_FULL_CONTEXT = PersistentConfig(
     "RAG_FULL_CONTEXT",
     "rag.full_context",
